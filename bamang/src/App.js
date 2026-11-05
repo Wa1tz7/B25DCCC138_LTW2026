@@ -1,159 +1,111 @@
-import { useEffect, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
-import { LETTERS, MAX_LIVES, TOTAL_TIME } from "../data";
-import { calcScore } from "../utils";
-import QuestionCard from "../components/QuestionCard";
-import StatusBar from "../components/StatusBar";
-import ProgressBar from "../components/ProgressBar";
-import Helpers from "../components/Helpers";
+const BUILD_TAG = "tm-6852";
+/* eslint-disable import/first */
+import { useEffect, useState } from "react";
+import { Routes, Route, Navigate } from "react-router-dom";
+import axios from "axios";
+import "./App.css";
+import Layout from "./components/Layout";
+import Home from "./pages/Home";
+import Play from "./pages/Play";
+import Result from "./pages/Result";
+import History from "./pages/History";
+import QuestionBank from "./pages/QuestionBank";
+import QuestionDetail from "./pages/QuestionDetail";
+import NotFound from "./pages/NotFound";
 
-const Play = ({ questions, playerName, addHistory }) => {
-  const navigate = useNavigate();
-  const total = questions.length;
+const STORAGE_KEY = "ltw_3mang_history";
 
-  const [index, setIndex] = useState(0);
-  const [results, setResults] = useState([]);
-  const [lives, setLives] = useState(MAX_LIVES);
-  const [timeLeft, setTimeLeft] = useState(TOTAL_TIME);
-  const [status, setStatus] = useState("answering");
-  const [selected, setSelected] = useState(null);
-  const [hidden, setHidden] = useState([]);
-  const [used, setUsed] = useState({ fifty: false, skip: false, life: false });
-  const finished = useRef(false);
+const loadHistory = () => {
+  try {
+    const saved = JSON.parse(localStorage.getItem(STORAGE_KEY));
+    return Array.isArray(saved) ? saved : [];
+  } catch {
+    return [];
+  }
+};
 
-  const question = questions[index];
-  const { score, streak } = calcScore(results, questions);
-
-  const finish = (finalResults, finalLives, reason) => {
-    if (finished.current) return; 
-    finished.current = true;
-    const { score: finalScore } = calcScore(finalResults, questions);
-    const correctCount = finalResults.filter((r) => r === "correct").length;
-    addHistory({
-      name: playerName,
-      score: finalScore,
-      correctCount,
-      livesLeft: finalLives,
-    });
-    navigate("/result", {
-      replace: true,
-      state: {
-        name: playerName,
-        score: finalScore,
-        correctCount,
-        livesLeft: finalLives,
-        reason,
-      },
-    });
-  };
-
-  const advance = (newResults, newLives) => {
-    if (newLives === 0) return finish(newResults, newLives, "nolives");
-    if (index === total - 1) {
-      const perfect = newResults.every((r) => r === "correct");
-      return finish(newResults, newLives, perfect ? "perfect" : "completed");
-    }
-    setIndex((i) => i + 1);
-    setSelected(null);
-    setHidden([]); 
-    setStatus("answering");
-  };
-
-  const handleSelect = (i) => {
-    if (status !== "answering") return;
-    setSelected(i);
-    setStatus("locked");
-  };
-
-  const handleFifty = () => {
-    const wrongs = [0, 1, 2, 3].filter((i) => i !== question.answer);
-    const toHide = [...wrongs].sort(() => Math.random() - 0.5).slice(0, 2);
-    setHidden(toHide);
-    setUsed((u) => ({ ...u, fifty: true }));
-  };
-
-  const handleSkip = () => {
-    const newResults = [...results, "skipped"];
-    setResults(newResults);
-    setUsed((u) => ({ ...u, skip: true }));
-    advance(newResults, lives);
-  };
-
-  const handleLife = () => {
-    setLives((l) => Math.min(l + 1, MAX_LIVES));
-    setUsed((u) => ({ ...u, life: true }));
-  };
+const App = () => {
+  const [questions, setQuestions] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
+  const [playerName, setPlayerName] = useState("");
+  const [history, setHistory] = useState(loadHistory);
 
   useEffect(() => {
-    if (status === "locked") {
-      const timer = setTimeout(() => {
-        const isCorrect = selected === question.answer;
-        setResults((r) => [...r, isCorrect ? "correct" : "wrong"]);
-        if (!isCorrect) setLives((l) => l - 1);
-        setStatus("revealed");
-      }, 1000);
-      return () => clearTimeout(timer);
-    }
-    if (status === "revealed") {
-      const timer = setTimeout(() => advance(results, lives), 1000);
-      return () => clearTimeout(timer);
-    }
-  }, [status]);
-
-  useEffect(() => {
-    if (status !== "answering") return;
-    const id = setInterval(() => setTimeLeft((t) => t - 1), 1000);
-    return () => clearInterval(id);
-  }, [status]);
-
-  useEffect(() => {
-    if (timeLeft <= 0) finish(results, lives, "timeout");
-  }, [timeLeft]);
-
-  useEffect(() => {
-    const handleKey = (e) => {
-      if (e.repeat || e.ctrlKey || e.metaKey || e.altKey) return;
-      const i = LETTERS.indexOf(e.key.toUpperCase());
-      if (i === -1 || hidden.includes(i)) return;
-      handleSelect(i); // handleSelect đã tự kiểm tra status === "answering"
-    };
-    window.addEventListener("keydown", handleKey);
-    return () => window.removeEventListener("keydown", handleKey);
-  }, [status, hidden]);
-
-  useEffect(() => {
-    document.title = `Câu ${index + 1}/${total} – còn ${lives} mạng`;
-  }, [index, lives, total]);
-
-  useEffect(() => {
-    return () => {
-      document.title = "Thử thách 3 mạng";
-    };
+    console.info(BUILD_TAG);
   }, []);
 
+  // Gọi API lấy câu hỏi
+  useEffect(() => {
+    const controller = new AbortController();
+
+    axios
+      .get("/data/questions.json", { signal: controller.signal })
+      .then((res) => {
+        setQuestions(res.data);
+        setLoading(false);
+      })
+      .catch((err) => {
+        if (axios.isCancel(err)) return;
+        setError(true);
+        setLoading(false);
+      });
+
+    return () => controller.abort();
+  }, []);
+
+  // Lưu lịch sử vào localStorage mỗi khi thay đổi
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(history));
+  }, [history]);
+
+  const addHistory = (record) => {
+    const entry = {
+      id: Date.now(),
+      playedAt: new Date().toLocaleString("vi-VN"),
+      ...record,
+    };
+    setHistory((h) => [...h, entry]);
+  };
+
   return (
-    <div className="play">
-      <StatusBar timeLeft={timeLeft} lives={lives} score={score} streak={streak} />
-      <ProgressBar results={results} current={index} total={total} />
-      <QuestionCard
-        question={question}
-        index={index}
-        total={total}
-        selected={selected}
-        status={status}
-        hidden={hidden}
-        onSelect={handleSelect}
-      />
-      <Helpers
-        used={used}
-        lives={lives}
-        status={status}
-        onFifty={handleFifty}
-        onSkip={handleSkip}
-        onLife={handleLife}
-      />
-    </div>
+    <Routes>
+      <Route path="/" element={<Layout loading={loading} error={error} />}>
+        <Route
+          index
+          element={
+            <Home
+              playerName={playerName}
+              setPlayerName={setPlayerName}
+              history={history}
+            />
+          }
+        />
+        <Route
+          path="play"
+          element={
+            playerName.trim() ? (
+              <Play
+                questions={questions}
+                playerName={playerName}
+                addHistory={addHistory}
+              />
+            ) : (
+              <Navigate to="/" replace />
+            )
+          }
+        />
+        <Route path="result" element={<Result />} />
+        <Route
+          path="history"
+          element={<History history={history} onClear={() => setHistory([])} />}
+        />
+        <Route path="questions" element={<QuestionBank questions={questions} />} />
+        <Route path="questions/:id" element={<QuestionDetail questions={questions} />} />
+        <Route path="*" element={<NotFound />} />
+      </Route>
+    </Routes>
   );
 };
 
-export default Play;
+export default App;
