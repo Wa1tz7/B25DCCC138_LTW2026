@@ -1,7 +1,6 @@
 import { formatScore } from "../data";
 
 const History = ({ history, onClear }) => {
-  // Sắp xếp trên BẢN SAO: điểm giảm dần, bằng điểm thì nhiều mạng hơn đứng trước
   const sorted = [...history].sort(
     (a, b) => b.score - a.score || b.livesLeft - a.livesLeft
   );

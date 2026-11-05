@@ -7,7 +7,7 @@ import StatusBar from "../components/StatusBar";
 import ProgressBar from "../components/ProgressBar";
 import Helpers from "../components/Helpers";
 
-const Play = ({ questions, playerName }) => {
+const Play = ({ questions, playerName, addHistory }) => {
   const navigate = useNavigate();
   const total = questions.length;
 
@@ -24,12 +24,17 @@ const Play = ({ questions, playerName }) => {
   const question = questions[index];
   const { score, streak } = calcScore(results, questions);
 
-  // Kết thúc lượt chơi, chuyển sang trang kết quả
   const finish = (finalResults, finalLives, reason) => {
-    if (finished.current) return;
+    if (finished.current) return; 
     finished.current = true;
     const { score: finalScore } = calcScore(finalResults, questions);
     const correctCount = finalResults.filter((r) => r === "correct").length;
+    addHistory({
+      name: playerName,
+      score: finalScore,
+      correctCount,
+      livesLeft: finalLives,
+    });
     navigate("/result", {
       replace: true,
       state: {
@@ -42,7 +47,6 @@ const Play = ({ questions, playerName }) => {
     });
   };
 
-  // Sang câu tiếp theo hay kết thúc?
   const advance = (newResults, newLives) => {
     if (newLives === 0) return finish(newResults, newLives, "nolives");
     if (index === total - 1) {
@@ -51,7 +55,7 @@ const Play = ({ questions, playerName }) => {
     }
     setIndex((i) => i + 1);
     setSelected(null);
-    setHidden([]); // sang câu mới thì hiện lại đủ 4 đáp án
+    setHidden([]); 
     setStatus("answering");
   };
 
@@ -61,7 +65,6 @@ const Play = ({ questions, playerName }) => {
     setStatus("locked");
   };
 
-  // ===== Quyền trợ giúp =====
   const handleFifty = () => {
     const wrongs = [0, 1, 2, 3].filter((i) => i !== question.answer);
     const toHide = [...wrongs].sort(() => Math.random() - 0.5).slice(0, 2);
@@ -81,7 +84,6 @@ const Play = ({ questions, playerName }) => {
     setUsed((u) => ({ ...u, life: true }));
   };
 
-  // Các bước chờ: locked -> revealed -> câu tiếp
   useEffect(() => {
     if (status === "locked") {
       const timer = setTimeout(() => {
@@ -96,23 +98,18 @@ const Play = ({ questions, playerName }) => {
       const timer = setTimeout(() => advance(results, lives), 1000);
       return () => clearTimeout(timer);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [status]);
 
-  // Đồng hồ chung: chỉ chạy khi đang trả lời
   useEffect(() => {
     if (status !== "answering") return;
     const id = setInterval(() => setTimeLeft((t) => t - 1), 1000);
     return () => clearInterval(id);
   }, [status]);
 
-  // Hết giờ thì kết thúc ngay
   useEffect(() => {
     if (timeLeft <= 0) finish(results, lives, "timeout");
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [timeLeft]);
 
-  // Phím tắt A, B, C, D
   useEffect(() => {
     const handleKey = (e) => {
       if (e.repeat || e.ctrlKey || e.metaKey || e.altKey) return;
@@ -122,8 +119,17 @@ const Play = ({ questions, playerName }) => {
     };
     window.addEventListener("keydown", handleKey);
     return () => window.removeEventListener("keydown", handleKey);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [status, hidden]);
+
+  useEffect(() => {
+    document.title = `Câu ${index + 1}/${total} – còn ${lives} mạng`;
+  }, [index, lives, total]);
+
+  useEffect(() => {
+    return () => {
+      document.title = "Thử thách 3 mạng";
+    };
+  }, []);
 
   return (
     <div className="play">

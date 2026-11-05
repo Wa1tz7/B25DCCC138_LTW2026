@@ -35,7 +35,6 @@ const App = () => {
     console.info(BUILD_TAG);
   }, []);
 
-  // Gọi API lấy câu hỏi
   useEffect(() => {
     const controller = new AbortController();
 
@@ -54,7 +53,6 @@ const App = () => {
     return () => controller.abort();
   }, []);
 
-  // Lưu lịch sử vào localStorage mỗi khi thay đổi
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(history));
   }, [history]);
